@@ -37,7 +37,7 @@ class Utils(object):
         max_sentence = max([len(sentence) for sentence in sentence_batch])
         return [sentence + [pad_id] * (max_sentence - len(sentence)) for sentence in sentence_batch]
 
-    def batch_iter(self, num_epochs, xs, ys, batch_size, input_pad_int, output_pad_int, shuffle=True):
+    def batch_iter(self, num_epochs, xs, ys, batch_size, x_pad_int, y_pad_int, shuffle=True):
         xs = np.array(xs)
         ys = np.array(ys)
         data_size = len(xs)
@@ -55,8 +55,8 @@ class Utils(object):
                 end_index = min((batch_num+1)*batch_size, data_size)
                 x_batch = shuffled_xs[start_index:end_index]
                 y_batch = shuffled_ys[start_index:end_index]
-                pad_x_batch = np.array(self.pad_sentence_batch(x_batch, input_pad_int))
-                pad_y_batch = np.array(self.pad_sentence_batch(y_batch, output_pad_int))
+                pad_x_batch = np.array(self.pad_sentence_batch(x_batch, x_pad_int))
+                pad_y_batch = np.array(self.pad_sentence_batch(y_batch, y_pad_int))
                 x_lengths = []
                 for one_x in x_batch:
                     x_lengths.append(len(one_x))
@@ -64,11 +64,30 @@ class Utils(object):
                 for one_y in y_batch:
                     y_lengths.append(len(one_y))
                 yield pad_x_batch, pad_y_batch, x_lengths, y_lengths
+    
+    def get_feed_in_data(self, xs, ys, x_pad_int, y_pad_int):
+        xs = np.array(xs)
+        ys = np.array(ys)
+        pad_x_batch = np.array(self.pad_sentence_batch(xs, x_pad_int))
+        pad_y_batch = np.array(self.pad_sentence_batch(ys, y_pad_int))
+        x_lengths = []
+        for one_x in xs:
+            x_lengths.append(len(one_x))
+        y_lengths = []
+        for one_y in ys:
+            y_lengths.append(len(one_y))
+        return pad_x_batch, pad_y_batch, x_lengths, y_lengths
+    
+    def get_sentence_from_ids(self, ids, id2word, sep=''):
+        ids = list(ids)
+        word_list = [id2word[one_id] for one_id in ids]
+        sentence = sep.join(word_list)
+        return sentence
 
 
 if __name__ == '__main__':
     utils = Utils()
-    x, y = utils.generate_char_x_y(data_size=2, seed=314)
+    x, y = utils.generate_char_x_y(data_size=10, seed=314)
     data = x + y
     id2word_x, word2id_x = utils.extract_character_vocab(x)
     id2word_y, word2id_y = utils.extract_character_vocab(y)
@@ -76,4 +95,9 @@ if __name__ == '__main__':
     # 将每一行转换成字符id的list
     x_ids = [[word2id_x.get(word, word2id_x['<UNK>']) for word in sentence] for sentence in x]
     y_ids = [[word2id_y.get(word, word2id_y['<UNK>']) for word in sentence] for sentence in y]
+
+    print(x_ids[:])
+    print('---')
+    acc = utils.calc_accuracy(x_ids[:], id2word_x, word2id_x)
+    print(acc)
 

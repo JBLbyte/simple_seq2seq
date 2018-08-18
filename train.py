@@ -20,9 +20,11 @@ rnn_size = 50
 num_layers = 2
 encoding_embedding_size = 15
 decoding_embedding_size = 15
+
 num_checkpoints = 10
 evaluate_every = 100
 checkpoint_every = 100
+
 
 ### data preprocessing
 utils = Utils()
@@ -40,10 +42,19 @@ y_ids = [[word2id_y.get(word, word2id_y['<UNK>'])
     for word in sentence] + [word2id_y['<EOS>']] for sentence in y]
 print(len(x_ids))
 print(len(y_ids))
-x_train = x_ids[:]
-y_train = y_ids[:]
+x_train = x_ids[batch_size:]
+y_train = y_ids[batch_size:]
 data_size_train = len(x_train)
+print(x_train[:10])
+print(y_train[:10])
 
+x_dev = x_ids[:batch_size]
+y_dev = y_ids[:batch_size]
+data_size_dev = len(x_dev)
+x_dev, y_dev, x_dev_lengths, y_dev_lengths = utils.get_feed_in_data(x_dev, y_dev, word2id_x['<PAD>'], word2id_y['<PAD>'])
+print(utils.get_sentence_from_ids(x_dev[0], id2word_x))
+print(utils.get_sentence_from_ids(y_dev[0], id2word_y))
+input('\nPress enter to start training...')
 
 
 ### training
@@ -126,36 +137,46 @@ with tf.Graph().as_default():
             if writer:
                 writer.add_summary(summaries, step)
 
-        # def dev_step(x_batch, y_batch, writer=None):
-        #     '''
-        #     Evalute the model on dev set.
-        #     '''
-        #     feed_dict = {
-        #         cnn.input_x: x_batch,
-        #         cnn.input_y: y_batch,
-        #         cnn.dropout_keep_prob: 1.0
-        #     }
-        #     step, summaries, loss, accuracy = sess.run(
-        #         [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
-        #         feed_dict)
-        #     timestr = datetime.datetime.now().isoformat()
-        #     num_batches_per_epoch = int((data_size_train-1)/FLAGS.batch_size)+1
-        #     epoch = int(step/num_batches_per_epoch)+1
-        #     print('{}: => epoch {} | step {} | loss {:g} | acc {:g}'.format(timestr, epoch, step, loss, accuracy))
-        #     if writer:
-        #         writer.add_summary(summaries, step)
+        def dev_step(x_batch, y_batch, x_length, y_length, writer=None):
+            '''
+            Evalute the model on dev set.
+            '''
+            feed_dict = {
+                seq2seq_model.input_x: x_batch,
+                seq2seq_model.input_y: y_batch,
+                seq2seq_model.x_sequence_length: x_length,
+                seq2seq_model.y_sequence_length: y_length
+            }
+            step, summaries, loss, y_logits, y_pred = sess.run(
+                [global_step, dev_summary_op, seq2seq_model.loss, seq2seq_model.y_logits, seq2seq_model.y_pred],
+                feed_dict)
+            timestr = datetime.datetime.now().isoformat()
+            num_batches_per_epoch = int((data_size_train-1)/batch_size)+1
+            epoch = int(step/num_batches_per_epoch)+1
+            print('{}: => epoch {} | step {} | loss {:g}'.format(timestr, epoch, step, loss))
+
+            # show y_pred and y_true
+            print('============================================')
+            for i in range(5):
+                print(utils.get_sentence_from_ids(x_batch[i], id2word_x))
+                print(utils.get_sentence_from_ids(y_pred[i], id2word_y))
+                print()
+            print('============================================')
+            time.sleep(10)
+
+            if writer:
+                writer.add_summary(summaries, step)
 
         ### training loop
         # generate batches
         # train loop, for each batch
         for batch_i, (x_batch, y_batch, x_lengths, y_lengths) in enumerate(utils.batch_iter(
              epochs, x_train, y_train, batch_size, word2id_x['<PAD>'], word2id_y['<PAD>'])):
-
             train_step(x_batch, y_batch, x_lengths, y_lengths, writer=train_summary_writer)
             current_step = tf.train.global_step(sess, global_step)
             if current_step % evaluate_every == 0:
                 print('\nEvaluation on dev set:')
-                # dev_step(x_dev, y_dev, writer=dev_summary_writer)
+                dev_step(x_dev, y_dev, x_dev_lengths, y_dev_lengths, writer=dev_summary_writer)
                 print('')
             if current_step % checkpoint_every == 0:
                 path = saver.save(sess=sess, save_path=checkpoint_prefix, global_step=global_step)
