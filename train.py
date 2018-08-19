@@ -20,6 +20,8 @@ rnn_size = 50
 num_layers = 2
 encoding_embedding_size = 15
 decoding_embedding_size = 15
+dropout_keep_prob = 0.7
+cell_type = 'lstm'
 
 num_checkpoints = 10
 evaluate_every = 100
@@ -72,8 +74,10 @@ with tf.Graph().as_default():
             decoder_embedding_size=decoding_embedding_size,
             rnn_size=rnn_size,
             num_layers=num_layers,
+            dropout_keep_prob=dropout_keep_prob,
             word2id_x=word2id_x,
             word2id_y=word2id_y,
+            cell_type=cell_type,
             seed=314
             )
 
