@@ -22,10 +22,15 @@ encoding_embedding_size = 15
 decoding_embedding_size = 15
 dropout_keep_prob = 0.7
 cell_type = 'lstm'
+beam_width = 10
 
 num_checkpoints = 10
 evaluate_every = 100
 checkpoint_every = 100
+
+use_pre_trained_model = False
+model_dir = './model'
+checkpoint_file = 'model-5400'
 
 
 ### data preprocessing
@@ -74,10 +79,10 @@ with tf.Graph().as_default():
             decoder_embedding_size=decoding_embedding_size,
             rnn_size=rnn_size,
             num_layers=num_layers,
-            dropout_keep_prob=dropout_keep_prob,
             word2id_x=word2id_x,
             word2id_y=word2id_y,
             cell_type=cell_type,
+            beam_width=beam_width,
             seed=314
             )
 
@@ -120,6 +125,13 @@ with tf.Graph().as_default():
         # initialize all variables
         sess.run(tf.global_variables_initializer())
 
+        if use_pre_trained_model and tf.train.checkpoint_exists(model_dir):
+            # checkpoint_file = tf.train.latest_checkpoint(model_dir)
+            checkpoint_file_path = '{}/{}'.format(model_dir, checkpoint_file)
+            print('>>>>>>>>>', checkpoint_file)
+            print('reloading model parameters...')
+            seq2seq_model.restore(sess, ckpt_path=checkpoint_file_path)
+
         # function for a single training step
         def train_step(x_batch, y_batch, x_length, y_length, writer=None):
             '''
@@ -129,7 +141,8 @@ with tf.Graph().as_default():
                 seq2seq_model.input_x: x_batch,
                 seq2seq_model.input_y: y_batch,
                 seq2seq_model.x_sequence_length: x_length,
-                seq2seq_model.y_sequence_length: y_length
+                seq2seq_model.y_sequence_length: y_length,
+                seq2seq_model.dropout_keep_prob: dropout_keep_prob
             }
             _, step, summaries, loss = sess.run(
                 [train_op, global_step, train_summary_op, seq2seq_model.loss],
@@ -149,21 +162,23 @@ with tf.Graph().as_default():
                 seq2seq_model.input_x: x_batch,
                 seq2seq_model.input_y: y_batch,
                 seq2seq_model.x_sequence_length: x_length,
-                seq2seq_model.y_sequence_length: y_length
+                seq2seq_model.y_sequence_length: y_length,
+                seq2seq_model.dropout_keep_prob: dropout_keep_prob
             }
-            step, summaries, loss, y_logits, y_pred = sess.run(
-                [global_step, dev_summary_op, seq2seq_model.loss, seq2seq_model.y_logits, seq2seq_model.y_pred],
+            step, summaries, loss, y_logits, y_pred, y_pred_beam = sess.run(
+                [global_step, dev_summary_op, seq2seq_model.loss, seq2seq_model.y_logits, seq2seq_model.y_pred, seq2seq_model.y_pred_beam],
                 feed_dict)
             timestr = datetime.datetime.now().isoformat()
             num_batches_per_epoch = int((data_size_train-1)/batch_size)+1
             epoch = int(step/num_batches_per_epoch)+1
             print('{}: => epoch {} | step {} | loss {:g}'.format(timestr, epoch, step, loss))
 
-            # show y_pred and y_true
+            # show y_pred
             print('============================================')
             for i in range(5):
                 print(utils.get_sentence_from_ids(x_batch[i], id2word_x))
                 print(utils.get_sentence_from_ids(y_pred[i], id2word_y))
+                print(utils.get_sentence_from_ids(y_pred_beam[i], id2word_y))
                 print()
             print('============================================')
             time.sleep(10)
