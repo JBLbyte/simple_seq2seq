@@ -53,6 +53,10 @@ class Seq2SeqModel(object):
             # bidirection
             encoder_output, encoder_final_state, _ = self.get_bidirection_rnn_output_and_state(
                 input_tensor=encoder_embed_input, num_layers=num_layers, rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed)
+            # encoder_final_state = tf.transpose(encoder_output, [1,0,2])[-1]
+            # encoder_final_state = encoder_final_state[-1]
+            print('encoder_output shape: ', tf.shape(encoder_output))
+            print('encoder_final_state shape: ', tf.shape(encoder_final_state))
         
         encoder_output = tf.contrib.layers.fully_connected(inputs=encoder_output[-1], num_outputs=rnn_size, activation_fn=tf.nn.tanh)
 
