@@ -33,11 +33,3 @@ tensorboard --logdir /"PATH_OF_CODE"/log/"TIMESTAMP"/summaries/
 [2]. [Deep learning for NLP best practices](http://ruder.io/deep-learning-nlp-best-practices/index.html#fnref:20)
 
 [3]. [tensorflow API docs](https://www.tensorflow.org/api_docs/python/tf)
-
-```flow
-op1=>operation: input sequnce
-op2=>operation: encoder
-op3=>operation: decoder
-op4=>operation: output sequnce
-op1->op2->op3->op4
-```
