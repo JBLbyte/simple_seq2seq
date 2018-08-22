@@ -23,8 +23,10 @@ encoding_embedding_size = 15
 decoding_embedding_size = 15
 dropout_keep_prob = 0.7
 attention_type='Bahdanau', # or 'Luong'
-cell_type = 'lstm'
-beam_width = 10
+cell_type = 'gru'
+beam_width = 3
+use_bidirection = True
+bidirection_layers = 1
 
 num_checkpoints = 10
 evaluate_every = 100
@@ -73,7 +75,7 @@ checkpoint_file = 'model-1000'
 checkpoint_file_path = '{}/{}.meta'.format(checkpoint_dir, checkpoint_file)
 print(checkpoint_file_path)
 
-saver = tf.train.import_meta_graph('./model/my-model.meta')
+saver = tf.train.import_meta_graph('./log/1534946377/checkpoints/model-8600.meta')
 
 # with tf.Session() as sess:
 

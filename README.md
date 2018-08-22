@@ -11,7 +11,7 @@ A simple example of seq2seq model.
 
 The model struture refers to the paper: [2016_Wu et al. Google's neural machine translation system: Bridging the gap between human and machine translation](https://arxiv.org/pdf/1609.08144.pdf%20\(7.pdf)
 
-[ input sequence ] -> [ embedding ] -> [ bidirection rnn + single-direction rnn layers ] -> [ attention mechanism ] -> [ decode output sequence ]
+**[ input sequence ] -> [ embedding ] -> [ encoder layers: bidirection rnn + single-direction rnn ] -> [ attention mechanism ] -> [ decoder rnn layers ] -> [ softmax (fully-connected layer) -> [ output sequence ] ]**
 
 The model graph in tensorboard is shown as following:
 
@@ -32,4 +32,12 @@ tensorboard --logdir /"PATH_OF_CODE"/log/"TIMESTAMP"/summaries/
 
 [2]. [Deep learning for NLP best practices](http://ruder.io/deep-learning-nlp-best-practices/index.html#fnref:20)
 
-[3]. [tensorflow api docs](https://www.tensorflow.org/api_docs/python/tf)
+[3]. [tensorflow API docs](https://www.tensorflow.org/api_docs/python/tf)
+
+```flow
+op1=>operation: input sequnce
+op2=>operation: encoder
+op3=>operation: decoder
+op4=>operation: output sequnce
+op1->op2->op3->op4
+```
