@@ -20,6 +20,7 @@ class Seq2SeqModel(object):
             word2id_y,
             cell_type='lstm',
             beam_width=3,
+            attention_type='Bahdanau', # or 'Luong'
             seed=None):
         ### set placeholder
         self.input_x = tf.placeholder(tf.int32, [None,None], name='input_x_tensor')
@@ -40,12 +41,14 @@ class Seq2SeqModel(object):
         encoder_embed_input = tf.nn.embedding_lookup(W_encoder_embedding, self.input_x)
     
         # single direction
-        cells_encoder = tf.nn.rnn_cell.MultiRNNCell([self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)])
-        encoder_output, encoder_final_state = tf.nn.dynamic_rnn(cells_encoder, encoder_embed_input, sequence_length=self.x_sequence_length, dtype=tf.float32)
+        rnn_layers_encoder = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)]
+        rnn_cells_encoder = tf.nn.rnn_cell.MultiRNNCell(rnn_layers_encoder)
+        encoder_output, encoder_final_state = tf.nn.dynamic_rnn(rnn_cells_encoder, encoder_embed_input, sequence_length=self.x_sequence_length, dtype=tf.float32)
 
         # bidirection
         # encoder_output, encoder_final_state, _ = self.get_bidirection_rnn_output_and_state(
         #     input_tensor=encoder_embed_input, num_layers=num_layers, rnn_size=rnn_size, cell_type='lstm', dropout_keep_prob=self.dropout_keep_prob, seed=seed)
+
         ### decoder
         ### process decoder input: ['a', 'b', 'c', '<EOS>', '<PAD>'] -> ['<GO>', 'a', 'b', 'c', '<EOS>', '<PAD>']
         input_y_strided = tf.strided_slice(self.input_y, [0,0], [self.batch_size,-1], [1,1], name='input_y_strided')
@@ -55,57 +58,61 @@ class Seq2SeqModel(object):
 
         output_fc_layer = Dense(y_vocab_size, kernel_initializer=tf.truncated_normal_initializer(mean=0.1, stddev=0.1, seed=seed), name='output_fc_layer')  # output全连接层，根据y_vocab_size定义输出层的大小
 
-        with tf.variable_scope("my_scope"):
-            # 如果使用beam_search，则需要将encoder的输出进行tile_batch，其实就是复制beam_size份。
+        with tf.variable_scope('my_scope'):
+            # 使用beam_search，将encoder的输出进行tile_batch，复制beam_width份
             tiled_encoder_output = tf.contrib.seq2seq.tile_batch(encoder_output, 1)
             tiled_encoder_final_state = tf.contrib.seq2seq.tile_batch(encoder_final_state, 1)
             y_sequence_length = tf.contrib.seq2seq.tile_batch(self.y_sequence_length, 1)
 
-            LuongAttention = tf.contrib.seq2seq.LuongAttention(num_units=rnn_size, memory=tiled_encoder_output, name="luong_attention")
-            cells_decoder = tf.nn.rnn_cell.MultiRNNCell([self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)])
-            attention_cell = tf.contrib.seq2seq.AttentionWrapper(cell=cells_decoder, attention_mechanism=LuongAttention, attention_layer_size=rnn_size)
-            decoder_initial_state = attention_cell.zero_state(self.batch_size * 1, tf.float32).clone(cell_state=tiled_encoder_final_state)
+            rnn_layers_decoder = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)]
+            rnn_cells_decoder = tf.nn.rnn_cell.MultiRNNCell(rnn_layers_decoder)
+            
+            with tf.name_scope('attention'):
+                attention_cell, decoder_initial_state = self.attention_mechanism(attention_type, rnn_size, rnn_cells_decoder, tiled_encoder_output, tiled_encoder_final_state, self.batch_size, 1)
         
             train_helper = tf.contrib.seq2seq.TrainingHelper(inputs=decoder_embed_input, sequence_length=y_sequence_length, time_major=False)
             train_decoder = tf.contrib.seq2seq.BasicDecoder(cell=attention_cell, helper=train_helper, initial_state=decoder_initial_state, output_layer=output_fc_layer)
-            # train_decoder = tf.contrib.seq2seq.BasicDecoder(cells_decoder, train_helper, decoder_initial_state, output_fc_layer)
             train_decoder_output, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=train_decoder, output_time_major=False, impute_finished=True, maximum_iterations=self.max_y_sequence_length)
-        
+
             self.y_logits = train_decoder_output.rnn_output
             self.y_pred = train_decoder_output.sample_id
 
             self.loss = tf.contrib.seq2seq.sequence_loss(self.y_logits, self.input_y, masks, name='loss')
 
-        with tf.variable_scope("my_scope" , reuse=True):           
-            # 如果使用beam_search，则需要将encoder的输出进行tile_batch，其实就是复制beam_size份。
+        with tf.variable_scope('my_scope', reuse=True):
             tiled_encoder_output_beam = tf.contrib.seq2seq.tile_batch(encoder_output, beam_width)
             tiled_encoder_final_state_beam = tf.contrib.seq2seq.tile_batch(encoder_final_state, beam_width)
             y_sequence_length_beam = tf.contrib.seq2seq.tile_batch(self.y_sequence_length, beam_width)
 
-            LuongAttention_beam = tf.contrib.seq2seq.LuongAttention(num_units=rnn_size, memory=tiled_encoder_output_beam, name="luong_attention")
-            cells_decoder_beam = tf.nn.rnn_cell.MultiRNNCell([self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)])
-            attention_cell_beam = tf.contrib.seq2seq.AttentionWrapper(cell=cells_decoder_beam, attention_mechanism=LuongAttention_beam, attention_layer_size=rnn_size)
-            decoder_initial_state_beam = attention_cell_beam.zero_state(self.batch_size * beam_width, tf.float32).clone(cell_state=tiled_encoder_final_state_beam)
+            rnn_layers_decoder_beam = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)]
+            rnn_cells_decoder_beam = tf.nn.rnn_cell.MultiRNNCell(rnn_layers_decoder_beam)
+            
+            with tf.name_scope('attention_beam'):
+                attention_cell_beam, decoder_initial_state_beam = self.attention_mechanism(attention_type, rnn_size, rnn_cells_decoder_beam, tiled_encoder_output_beam, tiled_encoder_final_state_beam, self.batch_size, beam_width)
 
-            # train_helper = tf.contrib.seq2seq.TrainingHelper(inputs=decoder_embed_input, sequence_length=y_sequence_length_beam, time_major=False)
-            # train_decoder = tf.contrib.seq2seq.BasicDecoder(cell=attention_cell, helper=train_helper, initial_state=decoder_initial_state_beam, output_layer=output_fc_layer)
-            # train_decoder_output, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=train_decoder, output_time_major=False, impute_finished=True, maximum_iterations=self.max_y_sequence_length)
-        
-            # self.y_logits = train_decoder_output.rnn_output
-            # self.y_pred = train_decoder_output.sample_id
-            _, self.y_pred_beam = self.beam_decoder(attention_cell_beam, W_decoder_embedding, decoder_initial_state_beam, output_fc_layer,
-                                                    start_tokens, end_token, beam_width, self.max_y_sequence_length) #beam_decoder, greedy_decoder
+            self.y_pred_beam = self.beam_decoder(attention_cell_beam, W_decoder_embedding, decoder_initial_state_beam, output_fc_layer,
+                                                    start_tokens, end_token, beam_width, self.max_y_sequence_length)
         
         self.training_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
     
+    def attention_mechanism(self, attention_type, rnn_size, rnn_cells_decoder, encoder_output, encoder_final_state, batch_size, beam_width):
+        if attention_type == 'Luong':
+            LuongAttention = tf.contrib.seq2seq.LuongAttention(num_units=rnn_size, memory=encoder_output, name='luong_attention')
+            attention_cell = tf.contrib.seq2seq.AttentionWrapper(cell=rnn_cells_decoder, attention_mechanism=LuongAttention, attention_layer_size=rnn_size, alignment_history=False)
+            initial_state = attention_cell.zero_state(batch_size * beam_width, tf.float32).clone(cell_state=encoder_final_state)
+        else:   # attention_type: Bahdanau
+            BahdanauAttention = tf.contrib.seq2seq.BahdanauAttention(num_units=rnn_size, memory=encoder_output,	name='Bahdanau')
+            attention_cell = tf.contrib.seq2seq.AttentionWrapper(cell=rnn_cells_decoder, attention_mechanism=BahdanauAttention, attention_layer_size=rnn_size, alignment_history=False)
+            initial_state = attention_cell.zero_state(batch_size * beam_width, tf.float32).clone(cell_state=encoder_final_state) 
+        return attention_cell, initial_state
+
 
     def beam_decoder(self, attention_cell, embedding, initial_state, output_layer, start_tokens, end_token, beam_width, max_y_sequence_length):
         decoder = tf.contrib.seq2seq.BeamSearchDecoder(cell=attention_cell, embedding=embedding, start_tokens=start_tokens, end_token=end_token, initial_state=initial_state, beam_width=beam_width, output_layer=output_layer)
         decoder_output, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=decoder, output_time_major=False, impute_finished=False, maximum_iterations=max_y_sequence_length)	#decoder_output[0].shape = [batch, time, beam]
-        transe_output = tf.transpose(decoder_output.predicted_ids, [2,0,1]) # [beam, batch, time]
-        best_output = transe_output[0]
-        beam_logits = tf.no_op()
-        return beam_logits, best_output
+        trans_output = tf.transpose(decoder_output.predicted_ids, [2,0,1]) # [beam, batch, time]
+        best_output = trans_output[0]
+        return best_output
 
     def get_rnn_cell(self, rnn_size, cell_type=None, dropout_keep_prob=1.0, seed=None):
         if cell_type is None or cell_type == 'lstm':

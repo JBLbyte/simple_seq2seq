@@ -13,6 +13,7 @@ from seq2seq_model import Seq2SeqModel
 
 
 ### hyper parameters
+#######################################
 lr = 1e-3
 epochs = 1000
 batch_size = 32
@@ -21,6 +22,7 @@ num_layers = 2
 encoding_embedding_size = 15
 decoding_embedding_size = 15
 dropout_keep_prob = 0.7
+attention_type='Bahdanau', # or 'Luong'
 cell_type = 'lstm'
 beam_width = 10
 
@@ -31,6 +33,7 @@ checkpoint_every = 100
 use_pre_trained_model = False
 model_dir = './model'
 checkpoint_file = 'model-5400'
+#######################################
 
 
 ### data preprocessing
@@ -83,6 +86,7 @@ with tf.Graph().as_default():
             word2id_y=word2id_y,
             cell_type=cell_type,
             beam_width=beam_width,
+            attention_type=attention_type,
             seed=314
             )
 
