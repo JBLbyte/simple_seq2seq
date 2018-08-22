@@ -21,7 +21,8 @@ class Seq2SeqModel(object):
             cell_type='lstm',
             beam_width=3,
             attention_type='Bahdanau', # or 'Luong'
-            direction_type='bi',   # or 'bi'
+            use_bidirection=True,
+            bidirection_layers=1,
             seed=None):
         ### set placeholder
         self.input_x = tf.placeholder(tf.int32, [None,None], name='input_x_tensor')
@@ -37,39 +38,36 @@ class Seq2SeqModel(object):
         end_token = word2id_y['<EOS>']
 
         ### encoder
-        # encoder_embed_input = tf.contrib.layers.embed_sequence(self.input_x, x_vocab_size, encoder_embedding_size)    # high level op, same as following 2 lines
-        W_encoder_embedding = tf.Variable(initial_value=tf.random_uniform(shape=[x_vocab_size, encoder_embedding_size], minval=-1.0, maxval=1.0), name='W_encoder_embedding')
-        encoder_embed_input = tf.nn.embedding_lookup(W_encoder_embedding, self.input_x)
+        with tf.name_scope('encoder_embedding'):
+            # encoder_embed_input = tf.contrib.layers.embed_sequence(self.input_x, x_vocab_size, encoder_embedding_size)    # high level op, same as following 2 lines
+            W_encoder_embedding = tf.Variable(initial_value=tf.random_uniform(shape=[x_vocab_size, encoder_embedding_size], minval=-1.0, maxval=1.0), name='W_encoder_embedding')
+            encoder_embed_input = tf.nn.embedding_lookup(W_encoder_embedding, self.input_x)
 
-        if direction_type == 'single':
+        if not use_bidirection:
             # single direction
             rnn_layers_encoder = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)]
             rnn_cells_encoder = tf.nn.rnn_cell.MultiRNNCell(rnn_layers_encoder)
             encoder_output, encoder_final_state = tf.nn.dynamic_rnn(rnn_cells_encoder, encoder_embed_input, sequence_length=self.x_sequence_length, dtype=tf.float32)
-            # encoder_output = tf.transpose(encoder_output, [1,0,2])[-1]
-            # encoder_final_state = encoder_final_state[-1]
-            print('encoder_final_state shape: ', tf.shape(encoder_final_state))
-        else:   # direction_type: 'bi'
+        else:
             # bidirection
-            encoder_output, encoder_final_state, _ = self.get_bidirection_rnn_output_and_state(
-                input_tensor=encoder_embed_input, num_layers=num_layers, rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed)
-            # encoder_final_state = tf.transpose(encoder_output, [1,0,2])[-1]
-            # encoder_final_state = encoder_final_state[-1]
-            print('encoder_output shape: ', tf.shape(encoder_output))
-            print('encoder_final_state shape: ', tf.shape(encoder_final_state))
-        
-        encoder_output = tf.contrib.layers.fully_connected(inputs=encoder_output[-1], num_outputs=rnn_size, activation_fn=tf.nn.tanh)
+            encoder_output, _, _ = self.get_bidirection_rnn_output_and_state(
+                input_tensor=encoder_embed_input, num_layers=bidirection_layers, rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed)
+            rnn_layers_encoder = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=self.dropout_keep_prob, seed=seed) for _ in range(num_layers)]
+            rnn_cells_encoder = tf.nn.rnn_cell.MultiRNNCell(rnn_layers_encoder)
+            encoder_output, encoder_final_state = tf.nn.dynamic_rnn(rnn_cells_encoder, encoder_output, sequence_length=self.x_sequence_length, dtype=tf.float32)
 
         ### decoder
         ### process decoder input: ['a', 'b', 'c', '<EOS>', '<PAD>'] -> ['<GO>', 'a', 'b', 'c', '<EOS>', '<PAD>']
         input_y_strided = tf.strided_slice(self.input_y, [0,0], [self.batch_size,-1], [1,1], name='input_y_strided')
         decoder_input = tf.concat([tf.fill([self.batch_size,1], word2id_y['<GO>']), input_y_strided], 1, name='input_y_for_decoder')
-        W_decoder_embedding = tf.Variable(initial_value=tf.random_uniform(shape=[y_vocab_size, decoder_embedding_size], minval=-1.0, maxval=1.0), name='W_decoder_embedding')
-        decoder_embed_input = tf.nn.embedding_lookup(W_decoder_embedding, decoder_input)
+
+        with tf.name_scope('decoder_embedding'):
+            W_decoder_embedding = tf.Variable(initial_value=tf.random_uniform(shape=[y_vocab_size, decoder_embedding_size], minval=-1.0, maxval=1.0), name='W_decoder_embedding')
+            decoder_embed_input = tf.nn.embedding_lookup(W_decoder_embedding, decoder_input)
 
         output_fc_layer = Dense(y_vocab_size, kernel_initializer=tf.truncated_normal_initializer(mean=0.1, stddev=0.1, seed=seed), name='output_fc_layer')  # output全连接层，根据y_vocab_size定义输出层的大小
 
-        with tf.variable_scope('my_scope'):
+        with tf.variable_scope('decoder_scope'):
             # 使用beam_search，将encoder的输出进行tile_batch，复制beam_width份
             tiled_encoder_output = tf.contrib.seq2seq.tile_batch(encoder_output, 1)
             tiled_encoder_final_state = tf.contrib.seq2seq.tile_batch(encoder_final_state, 1)
@@ -90,7 +88,7 @@ class Seq2SeqModel(object):
 
             self.loss = tf.contrib.seq2seq.sequence_loss(self.y_logits, self.input_y, masks, name='loss')
 
-        with tf.variable_scope('my_scope', reuse=True):
+        with tf.variable_scope('decoder_scope', reuse=True):
             tiled_encoder_output_beam = tf.contrib.seq2seq.tile_batch(encoder_output, beam_width)
             tiled_encoder_final_state_beam = tf.contrib.seq2seq.tile_batch(encoder_final_state, beam_width)
             y_sequence_length_beam = tf.contrib.seq2seq.tile_batch(self.y_sequence_length, beam_width)
@@ -136,7 +134,7 @@ class Seq2SeqModel(object):
         cells_fw = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=dropout_keep_prob, seed=seed) for _ in range(num_layers)]
         cells_bw = [self.get_rnn_cell(rnn_size=rnn_size, cell_type=cell_type, dropout_keep_prob=dropout_keep_prob, seed=seed) for _ in range(num_layers)]
         outputs, state_fw, state_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(cells_fw, cells_bw, input_tensor, sequence_length=self.x_sequence_length, dtype=tf.float32)
-        outputs = tf.transpose(outputs, [1,0,2]) 
+        # outputs = tf.transpose(outputs, [1,0,2]) 
         return outputs, state_fw, state_bw
     
     def restore(self, sess, var_list=None, ckpt_path=None):

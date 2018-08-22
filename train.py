@@ -23,8 +23,10 @@ encoding_embedding_size = 15
 decoding_embedding_size = 15
 dropout_keep_prob = 0.7
 attention_type='Bahdanau', # or 'Luong'
-cell_type = 'lstm'
-beam_width = 10
+cell_type = 'gru'
+beam_width = 3
+use_bidirection = True
+bidirection_layers = 1
 
 num_checkpoints = 10
 evaluate_every = 100
@@ -87,6 +89,8 @@ with tf.Graph().as_default():
             cell_type=cell_type,
             beam_width=beam_width,
             attention_type=attention_type,
+            use_bidirection=use_bidirection,
+            bidirection_layers=bidirection_layers,
             seed=314
             )
 
@@ -178,7 +182,7 @@ with tf.Graph().as_default():
             print('{}: => epoch {} | step {} | loss {:g}'.format(timestr, epoch, step, loss))
 
             # show y_pred
-            print('============================================')
+            print('\n============================================\n')
             for i in range(5):
                 print(utils.get_sentence_from_ids(x_batch[i], id2word_x))
                 print(utils.get_sentence_from_ids(y_pred[i], id2word_y))
