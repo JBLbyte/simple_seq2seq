@@ -32,9 +32,8 @@ num_checkpoints = 10
 evaluate_every = 100
 checkpoint_every = 100
 
-use_pre_trained_model = False
-model_dir = './model'
-checkpoint_file = 'model-5400'
+use_pre_trained_model = True
+model_file = './model/model-700'
 #######################################
 
 
@@ -97,8 +96,8 @@ with tf.Graph().as_default():
         # define training procedure
         global_step = tf.Variable(0, trainable=False, name='global_step')
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-        grads_and_vars = optimizer.compute_gradients(seq2seq_model.loss)
-        train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+        grads_and_vars = optimizer.compute_gradients(seq2seq_model.op_loss)
+        train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step, name='train_op')
 
         # output directory for models and summaries
         timestamp = str(int(time.time()))
@@ -128,17 +127,15 @@ with tf.Graph().as_default():
         checkpoint_prefix = os.path.join(checkpoint_dir, 'model')
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
+        
         saver = tf.train.Saver(tf.global_variables(), max_to_keep=num_checkpoints)
 
         # initialize all variables
         sess.run(tf.global_variables_initializer())
 
-        if use_pre_trained_model and tf.train.checkpoint_exists(model_dir):
-            # checkpoint_file = tf.train.latest_checkpoint(model_dir)
-            checkpoint_file_path = '{}/{}'.format(model_dir, checkpoint_file)
-            print('>>>>>>>>>', checkpoint_file)
+        if use_pre_trained_model:
             print('reloading model parameters...')
-            seq2seq_model.restore(sess, ckpt_path=checkpoint_file_path)
+            saver.restore(sess, model_file)
 
         # function for a single training step
         def train_step(x_batch, y_batch, x_length, y_length, writer=None):
@@ -195,8 +192,6 @@ with tf.Graph().as_default():
                 writer.add_summary(summaries, step)
 
         ### training loop
-        # generate batches
-        # train loop, for each batch
         for batch_i, (x_batch, y_batch, x_lengths, y_lengths) in enumerate(utils.batch_iter(
              epochs, x_train, y_train, batch_size, word2id_x['<PAD>'], word2id_y['<PAD>'])):
             train_step(x_batch, y_batch, x_lengths, y_lengths, writer=train_summary_writer)
@@ -206,5 +201,6 @@ with tf.Graph().as_default():
                 dev_step(x_dev, y_dev, x_dev_lengths, y_dev_lengths, writer=dev_summary_writer)
                 print('')
             if current_step % checkpoint_every == 0:
+                saver = tf.train.Saver(tf.global_variables(), max_to_keep=num_checkpoints)
                 path = saver.save(sess=sess, save_path=checkpoint_prefix, global_step=global_step)
                 print('\nSaved model checkpoint to {}\n'.format(path))

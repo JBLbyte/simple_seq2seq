@@ -11,7 +11,7 @@ A simple example of seq2seq model.
 
 The model struture refers to the paper: [2016_Wu et al. Google's neural machine translation system: Bridging the gap between human and machine translation](https://arxiv.org/pdf/1609.08144.pdf%20\(7.pdf)
 
-**[ input sequence ] -> [ embedding ] -> [ encoder layers: bidirection rnn + single-direction rnn ] -> [ attention mechanism ] -> [ decoder rnn layers ] -> [ softmax (fully-connected layer) -> [ output sequence ] ]**
+**[ input sequence ] -> [ embedding ] -> [ encoder layers: bidirection rnn + single-direction rnn ] -> [ attention mechanism ] -> [ decoder rnn layers ] -> [ softmax (fully-connected layer) -> [ output sequence ]**
 
 The model graph in tensorboard is shown as following:
 

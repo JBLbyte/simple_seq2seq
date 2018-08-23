@@ -32,9 +32,8 @@ num_checkpoints = 10
 evaluate_every = 100
 checkpoint_every = 100
 
-use_pre_trained_model = False
-model_dir = './model'
-checkpoint_file = 'model-5400'
+model_file = './model/model-500'
+model_file_meta = '{}.meta'.format(model_file)
 #######################################
 
 
@@ -66,39 +65,64 @@ data_size_dev = len(x_dev)
 x_dev, y_dev, x_dev_lengths, y_dev_lengths = utils.get_feed_in_data(x_dev, y_dev, word2id_x['<PAD>'], word2id_y['<PAD>'])
 print(utils.get_sentence_from_ids(x_dev[0], id2word_x))
 print(utils.get_sentence_from_ids(y_dev[0], id2word_y))
-input('\nPress enter to start training...')
+input('\nPress enter to start predict...')
 
 
-### load pre-trained model to predict
-checkpoint_dir = './log/1534925453/checkpoints'
-checkpoint_file = 'model-1000'
-checkpoint_file_path = '{}/{}.meta'.format(checkpoint_dir, checkpoint_file)
-print(checkpoint_file_path)
+### redefine the model structure
+seq2seq_model = Seq2SeqModel(
+    x_vocab_size=x_vocab_size,
+    y_vocab_size=y_vocab_size,
+    encoder_embedding_size=encoding_embedding_size,
+    decoder_embedding_size=decoding_embedding_size,
+    rnn_size=rnn_size,
+    num_layers=num_layers,
+    word2id_x=word2id_x,
+    word2id_y=word2id_y,
+    cell_type=cell_type,
+    beam_width=beam_width,
+    attention_type=attention_type,
+    use_bidirection=use_bidirection,
+    bidirection_layers=bidirection_layers,
+    seed=314
+    )
 
-saver = tf.train.import_meta_graph('./log/1534946377/checkpoints/model-8600.meta')
+#########################
+graph = tf.Graph()
+with tf.Session(graph=graph) as sess:
+    # Load the saved meta graph and restore variables
+    saver = tf.train.import_meta_graph(model_file_meta)
+    saver.restore(sess, model_file)
 
-# with tf.Session() as sess:
+    # Access and create placeholders variables and create feed-dict to feed new data
+    graph = tf.get_default_graph()
+    input_x_tensor = graph.get_tensor_by_name('input_x_tensor:0')
+    input_y_tensor = graph.get_tensor_by_name('input_y_tensor:0')
+    x_sequence_length = graph.get_tensor_by_name('x_sequence_length:0')
+    y_sequence_length = graph.get_tensor_by_name('y_sequence_length:0')
+    dropout_keep_prob = graph.get_tensor_by_name('dropout_keep_prob:0')
+    feed_dict = {
+        input_x_tensor: x_dev,
+        input_y_tensor: y_dev,
+        x_sequence_length: x_dev_lengths,
+        y_sequence_length: y_dev_lengths,
+        dropout_keep_prob: 1.0
+    }
 
-'''
-saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir))
+    op_global_step = graph.get_tensor_by_name('global_step:0')
+    op_train = graph.get_tensor_by_name('train_op:0')
+    op_loss = graph.get_tensor_by_name('decoder_scope/loss:0')
+    op_y_pred_greedy = graph.get_tensor_by_name('decoder_scope/y_pred:0')
+    op_y_pred_beam = graph.get_tensor_by_name('decoder_scope_1/y_pred_beam:0')
 
-# Access and create placeholders variables and create feed-dict to feed new data
-graph = tf.get_default_graph()
-input_x_tensor = graph.get_tensor_by_name('input_x_tensor:0')
-input_y_tensor = graph.get_tensor_by_name('input_y_tensor:0')
-x_sequence_length = graph.get_tensor_by_name('x_sequence_length:0')
-y_sequence_length = graph.get_tensor_by_name('y_sequence_length:0')
-dropout_keep_prob = graph.get_tensor_by_name('dropout_keep_prob:0')
-feed_dict = {
-    input_x_tensor: x_dev,
-    input_y_tensor: y_dev,
-    x_sequence_length: x_dev_lengths,
-    y_sequence_length: y_dev_lengths,
-    dropout_keep_prob: 1.0
-}
+    loss, y_pred_greedy, y_pred_beam = sess.run([op_loss, op_y_pred_greedy, op_y_pred_beam], feed_dict)
 
-#Now, access the op that you want to run. 
-op_loss = graph.get_tensor_by_name('loss:0')
-
-print(sess.run(op_loss, feed_dict))
-'''
+    print(loss)
+    print('\n============================================\n')
+    for i in range(5):
+        print(utils.get_sentence_from_ids(x_dev[i], id2word_x))
+        print(utils.get_sentence_from_ids(y_dev[i], id2word_y))
+        print(utils.get_sentence_from_ids(y_pred_greedy[i], id2word_y))
+        print(utils.get_sentence_from_ids(y_pred_beam[i], id2word_y))
+        print()
+    print('============================================')
+    print('DONE!')

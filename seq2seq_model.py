@@ -86,7 +86,8 @@ class Seq2SeqModel(object):
             self.y_logits = tf.identity(train_decoder_output.rnn_output, name='y_logits')
             self.y_pred = tf.identity(train_decoder_output.sample_id, name='y_pred')
 
-            self.loss = tf.contrib.seq2seq.sequence_loss(self.y_logits, self.input_y, masks, name='loss')
+            self.op_loss = tf.contrib.seq2seq.sequence_loss(self.y_logits, self.input_y, masks, name='op_loss')
+            self.loss = tf.identity(self.op_loss, name='loss')
 
         with tf.variable_scope('decoder_scope', reuse=True):
             tiled_encoder_output_beam = tf.contrib.seq2seq.tile_batch(encoder_output, beam_width)

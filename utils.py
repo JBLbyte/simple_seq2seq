@@ -25,7 +25,7 @@ class Utils(object):
     def extract_character_vocab(self, data):
         data = list(data)
         special_words = ['<PAD>', '<GO>', '<EOS>', '<UNK>']
-        word_set = list(set([word for word_list in data for word in word_list]))
+        word_set = sorted(set([word for word_list in data for word in word_list]))
         id2word = {idx:word for idx,word in enumerate(special_words + word_set)}
         word2id = {word:idx for idx,word in id2word.items()}
         return id2word, word2id
