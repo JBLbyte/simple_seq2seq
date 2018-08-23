@@ -102,8 +102,6 @@ class Seq2SeqModel(object):
 
             self.y_pred_beam = tf.identity(self.beam_decoder(attention_cell_beam, W_decoder_embedding, decoder_initial_state_beam, output_fc_layer,
                                                     start_tokens, end_token, beam_width, self.max_y_sequence_length), name='y_pred_beam')
-        
-        self.training_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
     
     def attention_mechanism(self, attention_type, rnn_size, rnn_cells_decoder, encoder_output, encoder_final_state, batch_size, beam_width):
         if attention_type == 'Luong':
@@ -137,10 +135,3 @@ class Seq2SeqModel(object):
         outputs, state_fw, state_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(cells_fw, cells_bw, input_tensor, sequence_length=self.x_sequence_length, dtype=tf.float32)
         # outputs = tf.transpose(outputs, [1,0,2]) 
         return outputs, state_fw, state_bw
-    
-    def restore(self, sess, var_list=None, ckpt_path=None):
-        if hasattr(self, 'training_variables'):
-            var_list = self.training_variables
-        self.restorer = tf.train.Saver(var_list)
-        self.restorer.restore(sess, ckpt_path)
-        print('Restore Finished!')
