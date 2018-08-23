@@ -32,7 +32,7 @@ num_checkpoints = 10
 evaluate_every = 100
 checkpoint_every = 100
 
-model_file = './model/model-500'
+model_file = './model/model-300'
 model_file_meta = '{}.meta'.format(model_file)
 #######################################
 
@@ -46,7 +46,6 @@ id2word_y, word2id_y = utils.extract_character_vocab(y)
 x_vocab_size = len(id2word_x)
 y_vocab_size = len(id2word_y)
 
-# 将每一行转换成字符id的list
 x_ids = [[word2id_x.get(word, word2id_x['<UNK>'])
     for word in sentence] for sentence in x]
 y_ids = [[word2id_y.get(word, word2id_y['<UNK>'])
@@ -86,7 +85,7 @@ seq2seq_model = Seq2SeqModel(
     seed=314
     )
 
-#########################
+### predict test data by restored model
 graph = tf.Graph()
 with tf.Session(graph=graph) as sess:
     # Load the saved meta graph and restore variables
@@ -116,7 +115,7 @@ with tf.Session(graph=graph) as sess:
 
     loss, y_pred_greedy, y_pred_beam = sess.run([op_loss, op_y_pred_greedy, op_y_pred_beam], feed_dict)
 
-    print(loss)
+    print('loss: {:g}'.format(loss))
     print('\n============================================\n')
     for i in range(5):
         print(utils.get_sentence_from_ids(x_dev[i], id2word_x))
@@ -125,4 +124,3 @@ with tf.Session(graph=graph) as sess:
         print(utils.get_sentence_from_ids(y_pred_beam[i], id2word_y))
         print()
     print('============================================')
-    print('DONE!')

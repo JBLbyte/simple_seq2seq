@@ -33,7 +33,7 @@ evaluate_every = 100
 checkpoint_every = 100
 
 use_pre_trained_model = True
-model_file = './model/model-700'
+model_file = './model/model-300'
 #######################################
 
 
