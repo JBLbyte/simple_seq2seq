@@ -6,6 +6,7 @@ import numpy as np
 import time
 import datetime
 import os
+import configparser
 import tensorflow as tf
 from tensorflow.python.layers.core import Dense
 from utils import Utils
@@ -14,26 +15,23 @@ from seq2seq_model import Seq2SeqModel
 
 ### hyper parameters
 #######################################
-lr = 1e-3
-epochs = 1000
-batch_size = 32
-rnn_size = 50
-num_layers = 2
-encoding_embedding_size = 15
-decoding_embedding_size = 15
-dropout_keep_prob = 0.7
-attention_type='Bahdanau', # or 'Luong'
-cell_type = 'gru'
-beam_width = 3
-use_bidirection = True
-bidirection_layers = 1
+config = configparser.ConfigParser()
+config.read('./params.cfg')
 
-num_checkpoints = 10
-evaluate_every = 100
-checkpoint_every = 100
+lr = float(config['model']['lr'])
+epochs = int(config['model']['epochs'])
+batch_size = int(config['model']['batch_size'])
+rnn_size = int(config['model']['rnn_size'])
+num_layers = int(config['model']['num_layers'])
+encoding_embedding_size = int(config['model']['encoding_embedding_size'])
+decoding_embedding_size = int(config['model']['decoding_embedding_size'])
+attention_type = config['model']['attention_type']
+cell_type = config['model']['cell_type']
+beam_width = int(config['model']['beam_width'])
+use_bidirection = config['model'].getboolean('use_bidirection')
+bidirection_layers = int(config['model']['bidirection_layers'])
 
-model_file = './model/model-300'
-model_file_meta = '{}.meta'.format(model_file)
+model_file = config['pre-trained']['model_file']
 #######################################
 
 
@@ -89,7 +87,7 @@ seq2seq_model = Seq2SeqModel(
 graph = tf.Graph()
 with tf.Session(graph=graph) as sess:
     # Load the saved meta graph and restore variables
-    saver = tf.train.import_meta_graph(model_file_meta)
+    saver = tf.train.import_meta_graph('{}.meta'.format(model_file))
     saver.restore(sess, model_file)
 
     # Access and create placeholders variables and create feed-dict to feed new data
@@ -118,9 +116,10 @@ with tf.Session(graph=graph) as sess:
     print('loss: {:g}'.format(loss))
     print('\n============================================\n')
     for i in range(5):
-        print(utils.get_sentence_from_ids(x_dev[i], id2word_x))
-        print(utils.get_sentence_from_ids(y_dev[i], id2word_y))
-        print(utils.get_sentence_from_ids(y_pred_greedy[i], id2word_y))
-        print(utils.get_sentence_from_ids(y_pred_beam[i], id2word_y))
+        print('index: {}'.format(i))
+        print('test_input_sequence:         {}'.format(utils.get_sentence_from_ids(x_dev[i], id2word_x)))
+        print('test_output_sequence:        {}'.format(utils.get_sentence_from_ids(y_dev[i], id2word_y)))
+        print('pred_output_sequence_greedy: {}'.format(utils.get_sentence_from_ids(y_pred_greedy[i], id2word_y)))
+        print('pred_output_sequence_beam:   {}'.format(utils.get_sentence_from_ids(y_pred_beam[i], id2word_y)))
         print()
     print('============================================')
