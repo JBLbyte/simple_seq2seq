@@ -21,8 +21,14 @@ The model graph in tensorboard is shown as following:
 ```sh
 python train.py
 ```
+Before training the model, you can set the model parameters in the configure file: 'params.cfg'
 
-## Visualizing results in tensorboard
+## Start predict
+```sh
+python predict.py
+```
+
+## Visualizing model in tensorboard
 ```sh
 tensorboard --logdir /"PATH_OF_CODE"/log/"TIMESTAMP"/summaries/
 ```
